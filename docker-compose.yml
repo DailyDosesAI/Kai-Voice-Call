@@ -1,0 +1,13 @@
+version: "3.8"
+
+services:
+  kai-agent:
+    image: kai-voice-call-agent:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: kai-voice-call-agent
+    stop_signal: SIGTERM
+    stop_grace_period: 10m
+    env_file:
+      - .env
