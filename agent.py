@@ -72,13 +72,9 @@ class RequestAnalyseVoiceCall(BaseModel):
 
 class Kai(Agent):
     def __init__(self) -> None:
-        prompt = langfuse.get_prompt("kai_base_prompt")
+        prompt = langfuse.get_prompt("kai_voice_call_prompt")
         super().__init__(
-            instructions=prompt.compile(
-                user_name="Fatem",
-                user_cefr_level="B2",
-                user_native_language="fa",
-            )
+            instructions=prompt.compile(),
         )
 
 
@@ -87,7 +83,6 @@ class KaiSession(AgentSession):
         super().__init__(
             llm=openai.realtime.RealtimeModel(voice="echo"),
         )
-        print(ctx.room.name)
         self.ctx = ctx
         self.metadata = KaiSessionMetadata(
             voice_call_id=int(ctx.room.name),
@@ -95,20 +90,26 @@ class KaiSession(AgentSession):
         self.messages = RequestAnalyseVoiceCall(messages=[])
         self.participant = None
 
-    def _load_participant(self):
-        print(self.ctx.room.remote_participants)
+    async def load_participant(self):
+        if self.participant is not None:
+            return
         for _, participant in self.ctx.room.remote_participants.items():
             self.participant = KaiSessionParticipant.model_validate_json(
                 participant.metadata
             )
             break
 
+        if self.participant is None:
+            return
+        
+        await self.generate_reply(
+            instructions=f"Student name is {self.participant.name}, their CEFR level is {self.participant.cefr_level}, their native language is {self.participant.native_language}"
+        )
+
     async def _analyze_messages(self, messages: RequestAnalyseVoiceCall):
         if self.participant is None:
-            print("No participant found")
             return
 
-        print(messages)
         async with httpx.AsyncClient() as client:
             response = await client.post(
                 f"{settings.kai_api_base_url}/kai/voice-call/{self.metadata.voice_call_id}/analyze/",
@@ -118,13 +119,11 @@ class KaiSession(AgentSession):
             response.raise_for_status()
 
     async def on_conversation_item_added(self, event: ConversationItemAddedEvent):
-        self._load_participant()
+        asyncio.create_task(self.load_participant())
         if len(self.messages.messages) >= 4:
-            print("Analyzing messages")
             await self._analyze_messages(self.messages)
             self.messages.messages = []
 
-        print(self.messages.messages)
         if event.item.role == "user":
             self.messages.messages.append(
                 RequestAnalyseVoiceCallMessage(
@@ -145,7 +144,7 @@ class KaiSession(AgentSession):
         self.messages.messages = []
 
     async def on_participant_connected(self):
-        self._load_participant()
+        asyncio.create_task(self.load_participant())
 
 
 # Entrypoint
@@ -173,7 +172,7 @@ async def entrypoint(ctx: agents.JobContext):
         print("Participant connected")
         asyncio.create_task(kai_session.on_participant_connected())
 
-    await kai_session.generate_reply(instructions="Greet the student in English")
+    await kai_session.load_participant()
 
 
 if __name__ == "__main__":
