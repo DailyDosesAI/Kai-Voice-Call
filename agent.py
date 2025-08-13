@@ -2,7 +2,6 @@ import asyncio
 import json
 import os
 from enum import Enum
-from http.client import HTTPException
 from typing import Any, List
 
 import httpx
@@ -15,7 +14,9 @@ from livekit.plugins import noise_cancellation, openai
 from openai import AsyncOpenAI
 from pydantic import BaseModel
 from pydantic_settings import BaseSettings
+
 load_dotenv()
+
 
 class KaiSettings(BaseSettings):
     openai_api_key: str
@@ -127,7 +128,7 @@ class KaiSession(AgentSession):
                 response.raise_for_status()
             except Exception as e:
                 print(f"while analyzing conversation got {e}")
-                #TODO: catch properly and log properly
+                # TODO: catch properly and log properly
 
     async def on_conversation_item_added(self, event: ConversationItemAddedEvent):
         asyncio.create_task(self.load_participant())
@@ -161,6 +162,7 @@ class KaiSession(AgentSession):
 class TesterSession(KaiSession):
     def __init__(self, ctx: agents.JobContext):
         super().__init__(ctx)
+        os.makedirs("temp", exist_ok=True)
         self.file_name = f"temp/voice_call_{ctx.room.name}.jsonl"
         self.conversation = list()
 
@@ -180,10 +182,9 @@ class TesterSession(KaiSession):
                 await gpt.files.create(file=open(self.file_name, "rb"), purpose="evals")
             except Exception as e:
                 print(f"while uploading to gpt got {e}")
-                #TODO: catch properly and log properly
+                # TODO: catch properly and log properly
             os.remove(self.file_name)
             self.conversation.clear()
-
 
 
 # Entrypoint
