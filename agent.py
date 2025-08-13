@@ -161,7 +161,11 @@ class KaiSession(AgentSession):
 class TesterSession(KaiSession):
     def __init__(self, ctx: agents.JobContext):
         super().__init__(ctx)
-        self.file_name = f"temp/voice_call_{ctx.room.name}.jsonl"
+ def __init__(self, ctx: agents.JobContext):
+     super().__init__(ctx)
++    os.makedirs("temp", exist_ok=True)
+     self.file_name = f"temp/voice_call_{ctx.room.name}.jsonl"
+     self.conversation = None
         self.conversation = None
 
     async def on_conversation_item_added(self, event: ConversationItemAddedEvent):
