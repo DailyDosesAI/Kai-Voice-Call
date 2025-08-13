@@ -2,6 +2,7 @@ import asyncio
 import json
 import os
 from enum import Enum
+from http.client import HTTPException
 from typing import Any, List
 
 import httpx
@@ -14,10 +15,7 @@ from livekit.plugins import noise_cancellation, openai
 from openai import AsyncOpenAI
 from pydantic import BaseModel
 from pydantic_settings import BaseSettings
-
 load_dotenv()
-gpt = AsyncOpenAI()
-
 
 class KaiSettings(BaseSettings):
     openai_api_key: str
@@ -38,6 +36,8 @@ class KaiSettings(BaseSettings):
 
 
 settings = KaiSettings()
+
+gpt = AsyncOpenAI(api_key=settings.openai_api_key)
 
 langfuse = Langfuse(
     public_key=settings.langfuse_public_key,
@@ -126,8 +126,8 @@ class KaiSession(AgentSession):
                 )
                 response.raise_for_status()
             except Exception as e:
-                # TODO: log e
-                pass
+                print(f"while analyzing conversation got {e}")
+                #TODO: catch properly and log properly
 
     async def on_conversation_item_added(self, event: ConversationItemAddedEvent):
         asyncio.create_task(self.load_participant())
@@ -162,7 +162,7 @@ class TesterSession(KaiSession):
     def __init__(self, ctx: agents.JobContext):
         super().__init__(ctx)
         self.file_name = f"temp/voice_call_{ctx.room.name}.jsonl"
-        self.conversation = None
+        self.conversation = list()
 
     async def on_conversation_item_added(self, event: ConversationItemAddedEvent):
         await super().on_conversation_item_added(event)
@@ -173,15 +173,17 @@ class TesterSession(KaiSession):
 
     async def on_participant_disconnected(self):
         await super().on_participant_disconnected()
-        with open(self.file_name, "a") as out:
-            out.write(json.dumps({"conversation": self.conversation}) + "\n")
-        await gpt.files.create(file=open(self.file_name, "rb"), purpose="evals")
-        os.remove(self.file_name)
+        if self.conversation:
+            with open(self.file_name, "w") as out:
+                out.write(json.dumps({"conversation": self.conversation}) + "\n")
+            try:
+                await gpt.files.create(file=open(self.file_name, "rb"), purpose="evals")
+            except Exception as e:
+                print(f"while uploading to gpt got {e}")
+                #TODO: catch properly and log properly
+            os.remove(self.file_name)
+            self.conversation.clear()
 
-    async def on_participant_connected(self):
-        await super().on_participant_connected()
-        open(self.file_name, "w").close()
-        self.conversation = list()
 
 
 # Entrypoint
