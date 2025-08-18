@@ -8,9 +8,8 @@ import httpx
 from dotenv import load_dotenv
 from langfuse import Langfuse
 from livekit import agents
-from livekit.agents import AgentSession, RoomInputOptions
-from livekit.agents import ConversationItemAddedEvent
-from livekit.plugins import noise_cancellation, openai
+from livekit.agents import AgentSession, RoomInputOptions, ConversationItemAddedEvent
+from livekit.plugins import noise_cancellation, openai, simli
 from openai import AsyncOpenAI
 from pydantic import BaseModel
 from pydantic_settings import BaseSettings
@@ -31,6 +30,9 @@ class KaiSettings(BaseSettings):
 
     kai_api_base_url: str
     kai_api_secret_key: str
+    
+    simli_api_key: str
+    simli_face_id: str
 
     class Config:
         env_file = ".env"
@@ -197,6 +199,14 @@ async def entrypoint(ctx: agents.JobContext):
             noise_cancellation=noise_cancellation.BVC(),
         ),
     )
+    
+    avatar = simli.AvatarSession(
+        simli_config=simli.SimliConfig(
+            api_key=settings.simli_api_key,
+            face_id=settings.simli_face_id,
+        ),
+    )
+    await avatar.start(kai_session, room=ctx.room)
 
     @kai_session.on("conversation_item_added")
     def on_conversation_item_added(event: ConversationItemAddedEvent):
@@ -205,11 +215,9 @@ async def entrypoint(ctx: agents.JobContext):
     @ctx.room.on("participant_disconnected")
     def on_participant_disconnected(event: Any):
         asyncio.create_task(kai_session.on_participant_disconnected())
-        # Here you could insert into your database
 
     @ctx.room.on("participant_connected")
     def on_participant_connected(event: Any):
-        print("Participant connected")
         asyncio.create_task(kai_session.on_participant_connected())
 
     await kai_session.load_participant()
