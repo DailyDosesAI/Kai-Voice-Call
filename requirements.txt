@@ -6,3 +6,4 @@ langfuse
 pydantic
 pydantic-settings
 httpx
+openai
