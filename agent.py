@@ -1,23 +1,16 @@
-<<<<<<< Updated upstream
-=======
 import asyncio
-import json
-import os
 from enum import Enum
-from typing import Any, List, Optional
-
->>>>>>> Stashed changes
-import httpx
-import asyncio
-
 from typing import Any, List
-from enum import Enum
+from typing import Optional
+
+import httpx
 from dotenv import load_dotenv
-from livekit import agents
-from livekit.agents import AgentSession, RoomInputOptions
-from livekit.plugins import noise_cancellation, openai
 from langfuse import Langfuse
+from livekit import agents
+from livekit.agents import Agent
+from livekit.agents import AgentSession, RoomInputOptions
 from livekit.agents import ConversationItemAddedEvent
+from livekit.plugins import noise_cancellation, openai
 from pydantic import BaseModel
 from pydantic_settings import BaseSettings
 
@@ -50,9 +43,6 @@ langfuse = Langfuse(
     host=settings.langfuse_host,
 )
 
-# Kai LLM Agent
-from livekit.agents import Agent
-
 
 class KaiSessionMetadata(BaseModel):
     voice_call_id: int
@@ -60,9 +50,9 @@ class KaiSessionMetadata(BaseModel):
 
 class KaiSessionParticipant(BaseModel):
     id: int
-    name: Optional[str]
-    cefr_level: Optional[str]
-    native_language: Optional[str]
+    name: Optional[str] = None
+    cefr_level: Optional[str] = None
+    native_language: Optional[str] = None
 
 
 class RequestAnalyseVoiceCallMessageRole(Enum):
@@ -110,7 +100,7 @@ class KaiSession(AgentSession):
 
         if self.participant is None:
             return
-        
+
         await self.generate_reply(
             instructions=f"Student name is {self.participant.name}, their CEFR level is {self.participant.cefr_level}, their native language is {self.participant.native_language}"
         )
