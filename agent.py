@@ -1,3 +1,12 @@
+<<<<<<< Updated upstream
+=======
+import asyncio
+import json
+import os
+from enum import Enum
+from typing import Any, List, Optional
+
+>>>>>>> Stashed changes
 import httpx
 import asyncio
 
@@ -51,9 +60,9 @@ class KaiSessionMetadata(BaseModel):
 
 class KaiSessionParticipant(BaseModel):
     id: int
-    name: str
-    cefr_level: str
-    native_language: str
+    name: Optional[str]
+    cefr_level: Optional[str]
+    native_language: Optional[str]
 
 
 class RequestAnalyseVoiceCallMessageRole(Enum):
