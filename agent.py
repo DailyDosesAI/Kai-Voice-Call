@@ -3,13 +3,17 @@ import json
 import os
 from enum import Enum
 from typing import Any, List
+from typing import Optional
 
 import httpx
 from dotenv import load_dotenv
 from langfuse import Langfuse
 from livekit import agents
-from livekit.agents import AgentSession, RoomInputOptions, ConversationItemAddedEvent
-from livekit.plugins import noise_cancellation, openai, simli
+from livekit.agents import Agent
+from livekit.agents import AgentSession, RoomInputOptions
+from livekit.agents import ConversationItemAddedEvent
+from livekit.plugins import noise_cancellation, openai
+from livekit.plugins import simli
 from openai import AsyncOpenAI
 from pydantic import BaseModel
 from pydantic_settings import BaseSettings
@@ -30,7 +34,7 @@ class KaiSettings(BaseSettings):
 
     kai_api_base_url: str
     kai_api_secret_key: str
-    
+
     simli_api_key: str
     simli_face_id: str
 
@@ -48,9 +52,6 @@ langfuse = Langfuse(
     host=settings.langfuse_host,
 )
 
-# Kai LLM Agent
-from livekit.agents import Agent
-
 
 class KaiSessionMetadata(BaseModel):
     voice_call_id: int
@@ -58,9 +59,9 @@ class KaiSessionMetadata(BaseModel):
 
 class KaiSessionParticipant(BaseModel):
     id: int
-    name: str
-    cefr_level: str
-    native_language: str
+    name: Optional[str] = None
+    cefr_level: Optional[str] = None
+    native_language: Optional[str] = None
 
 
 class RequestAnalyseVoiceCallMessageRole(Enum):
@@ -199,7 +200,7 @@ async def entrypoint(ctx: agents.JobContext):
             noise_cancellation=noise_cancellation.BVC(),
         ),
     )
-    
+
     avatar = simli.AvatarSession(
         simli_config=simli.SimliConfig(
             api_key=settings.simli_api_key,
