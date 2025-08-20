@@ -4,13 +4,17 @@ import os
 from enum import Enum
 from pathlib import Path
 from typing import Any, List
+from typing import Optional
 
 import httpx
 from dotenv import load_dotenv
 from langfuse import Langfuse
 from livekit import agents
-from livekit.agents import AgentSession, RoomInputOptions, ConversationItemAddedEvent
-from livekit.plugins import noise_cancellation, openai, simli
+from livekit.agents import Agent
+from livekit.agents import AgentSession, RoomInputOptions
+from livekit.agents import ConversationItemAddedEvent
+from livekit.plugins import noise_cancellation, openai
+from livekit.plugins import simli
 from openai import AsyncOpenAI
 from openai.types.beta.realtime.session import TurnDetection
 from pydantic import BaseModel, Field
@@ -69,9 +73,6 @@ langfuse = Langfuse(
     host=settings.langfuse_host,
 )
 
-# Kai LLM Agent
-from livekit.agents import Agent
-
 
 class KaiSessionMetadata(BaseModel):
     voice_call_id: int
@@ -79,9 +80,9 @@ class KaiSessionMetadata(BaseModel):
 
 class KaiSessionParticipant(BaseModel):
     id: int
-    name: str
-    cefr_level: str
-    native_language: str
+    name: Optional[str] = None
+    cefr_level: Optional[str] = None
+    native_language: Optional[str] = None
 
 
 class RequestAnalyseVoiceCallMessageRole(Enum):
@@ -237,7 +238,8 @@ class TesterSession(KaiSession):
 
 # Entrypoint
 async def entrypoint(ctx: agents.JobContext):
-    kai_session = TesterSession(ctx)
+    kai_session = KaiSession(ctx)
+
     await kai_session.start(
         room=ctx.room,
         agent=Kai(),
@@ -245,14 +247,6 @@ async def entrypoint(ctx: agents.JobContext):
             noise_cancellation=noise_cancellation.BVC(),
         ),
     )
-
-    avatar = simli.AvatarSession(
-        simli_config=simli.SimliConfig(
-            api_key=settings.simli_api_key,
-            face_id=settings.simli_face_id,
-        ),
-    )
-    await avatar.start(kai_session, room=ctx.room)
 
     @kai_session.on("conversation_item_added")
     def on_conversation_item_added(event: ConversationItemAddedEvent):
@@ -265,6 +259,14 @@ async def entrypoint(ctx: agents.JobContext):
     @ctx.room.on("participant_connected")
     def on_participant_connected(event: Any):
         asyncio.create_task(kai_session.on_participant_connected())
+
+    # avatar = simli.AvatarSession(
+    #     simli_config=simli.SimliConfig(
+    #         api_key=settings.simli_api_key,
+    #         face_id=settings.simli_face_id,
+    #     ),
+    # )
+    # await avatar.start(kai_session, room=ctx.room)
 
     await kai_session.load_participant()
 
