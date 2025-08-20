@@ -14,7 +14,6 @@ from livekit.agents import Agent
 from livekit.agents import AgentSession, RoomInputOptions
 from livekit.agents import ConversationItemAddedEvent
 from livekit.plugins import noise_cancellation, openai
-from livekit.plugins import simli
 from openai import AsyncOpenAI
 from openai.types.beta.realtime.session import TurnDetection
 from pydantic import BaseModel, Field
@@ -160,7 +159,6 @@ class KaiSession(AgentSession):
         # await self.generate_reply(
         #     instructions=f"Student name is {self.participant.name}, their CEFR level is {self.participant.cefr_level}, their native language is {self.participant.native_language}"
         # )
-        self.update_agent(Kai(instructions=await self.get_prompt()))
 
     async def _analyze_messages(self, messages: RequestAnalyseVoiceCall):
         if self.participant is None:
@@ -205,7 +203,7 @@ class KaiSession(AgentSession):
 
     async def on_participant_connected(self):
         await self.load_participant()
-        self.update_agent(Kai())
+        self.update_agent(Kai(instructions=await self.get_prompt()))
 
 
 class TesterSession(KaiSession):
