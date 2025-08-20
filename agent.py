@@ -2,6 +2,7 @@ import asyncio
 import json
 import os
 from enum import Enum
+from pathlib import Path
 from typing import Any, List
 from typing import Optional
 
@@ -13,12 +14,28 @@ from livekit.agents import Agent
 from livekit.agents import AgentSession, RoomInputOptions
 from livekit.agents import ConversationItemAddedEvent
 from livekit.plugins import noise_cancellation, openai
-from livekit.plugins import simli
 from openai import AsyncOpenAI
-from pydantic import BaseModel
+from openai.types.beta.realtime.session import TurnDetection
+from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings
 
+from models.language_level import LanguageLevel
+
 load_dotenv()
+
+
+class PromptSettings(BaseModel):
+    voice_call_prompt_a: str
+    voice_call_prompt_b_and_c: str
+
+    @classmethod
+    def load_from_file(cls, path: str):
+        p = Path(path)
+        if not p.is_file():
+            raise FileNotFoundError(f"Prompt file {p} not found")
+        with open(path, "r") as f:
+            data = json.load(f)
+        return cls(**data)
 
 
 class KaiSettings(BaseSettings):
@@ -37,6 +54,9 @@ class KaiSettings(BaseSettings):
 
     simli_api_key: str
     simli_face_id: str
+
+    prompt: PromptSettings = Field(
+        default_factory=lambda: PromptSettings.load_from_file(os.getenv("PROMPTS_FILE", "prompts.json")))
 
     class Config:
         env_file = ".env"
@@ -79,17 +99,20 @@ class RequestAnalyseVoiceCall(BaseModel):
 
 
 class Kai(Agent):
-    def __init__(self) -> None:
+    def __init__(self, *args, **kwargs) -> None:
         prompt = langfuse.get_prompt("kai_voice_call_prompt")
-        super().__init__(
-            instructions=prompt.compile(),
-        )
+        if not 'instructions' in kwargs:
+            kwargs['instructions'] = prompt.compile()
+        super().__init__(*args, **kwargs)
 
 
 class KaiSession(AgentSession):
     def __init__(self, ctx: agents.JobContext):
         super().__init__(
-            llm=openai.realtime.RealtimeModel(voice="echo"),
+            llm=openai.realtime.RealtimeModel(voice="echo", turn_detection=TurnDetection(
+                type="semantic_vad",
+                # silence_duration_ms= 1500  # wait 1.5 seconds after you stop talking
+            )),
         )
         self.ctx = ctx
         self.metadata = KaiSessionMetadata(
@@ -100,6 +123,26 @@ class KaiSession(AgentSession):
 
         if self.ctx.room.remote_participants:
             asyncio.create_task(self.on_participant_connected())
+
+    async def get_prompt(self) -> str:
+        if not self.participant:
+            raise ValueError("Student is not set")
+
+        voice_call_prompt_id = settings.prompt.voice_call_prompt_a if self.participant.cefr_level in [LanguageLevel.A1,
+                                                                                                      LanguageLevel.A2] else settings.prompt.voice_call_prompt_b_and_c
+        voice_call_prompt = langfuse.get_prompt(voice_call_prompt_id)
+
+        return voice_call_prompt.compile(
+            user_name=self.participant.name if self.participant.name else "<UNKNOWN>",
+            user_cefr_level=(
+                self.participant.cefr_level if self.participant.cefr_level else "<UNKNOWN>"
+            ),
+            user_native_language=(
+                self.participant.native_language
+                if self.participant.native_language
+                else "<UNKNOWN>"
+            ),
+        )
 
     async def load_participant(self):
         if self.participant is not None:
@@ -113,9 +156,9 @@ class KaiSession(AgentSession):
         if self.participant is None:
             return
 
-        await self.generate_reply(
-            instructions=f"Student name is {self.participant.name}, their CEFR level is {self.participant.cefr_level}, their native language is {self.participant.native_language}"
-        )
+        # await self.generate_reply(
+        #     instructions=f"Student name is {self.participant.name}, their CEFR level is {self.participant.cefr_level}, their native language is {self.participant.native_language}"
+        # )
 
     async def _analyze_messages(self, messages: RequestAnalyseVoiceCall):
         if self.participant is None:
@@ -159,7 +202,8 @@ class KaiSession(AgentSession):
         self.messages.messages = []
 
     async def on_participant_connected(self):
-        asyncio.create_task(self.load_participant())
+        await self.load_participant()
+        self.update_agent(Kai(instructions=await self.get_prompt()))
 
 
 class TesterSession(KaiSession):
@@ -193,7 +237,7 @@ class TesterSession(KaiSession):
 # Entrypoint
 async def entrypoint(ctx: agents.JobContext):
     kai_session = KaiSession(ctx)
-        
+
     await kai_session.start(
         room=ctx.room,
         agent=Kai(),
@@ -201,7 +245,7 @@ async def entrypoint(ctx: agents.JobContext):
             noise_cancellation=noise_cancellation.BVC(),
         ),
     )
-    
+
     @kai_session.on("conversation_item_added")
     def on_conversation_item_added(event: ConversationItemAddedEvent):
         asyncio.create_task(kai_session.on_conversation_item_added(event))
