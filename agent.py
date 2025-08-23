@@ -1,6 +1,7 @@
 import asyncio
 import json
 import os
+import re
 from enum import Enum
 from pathlib import Path
 from typing import Any, List
@@ -14,6 +15,7 @@ from livekit.agents import Agent
 from livekit.agents import AgentSession, RoomInputOptions
 from livekit.agents import ConversationItemAddedEvent
 from livekit.plugins import noise_cancellation, openai
+from livekit.rtc import RpcInvocationData
 from openai import AsyncOpenAI
 from openai.types.beta.realtime.session import TurnDetection
 from pydantic import BaseModel, Field
@@ -105,6 +107,21 @@ class Kai(Agent):
             kwargs['instructions'] = prompt.compile()
         super().__init__(*args, **kwargs)
 
+    async def adjust_speed(self, speed: str):
+        if speed not in {"slow", "normal"}:
+            return "Invalid speed. Use 'slow' or 'normal'."
+
+        base_instructions = self.instructions or ""
+        cleaned_instructions = re.sub(r"\n{1,2}System speed setting:.*\Z", "", base_instructions, flags=re.S)
+        if speed == "slow":
+            speed_guidance = (
+                "Speaking speed: slow. Speak clearly at a relaxed pace; prefer shorter sentences and brief pauses."
+            )
+            new_instructions = f"{cleaned_instructions}\n\nSystem speed setting: {speed_guidance}"
+        else:
+            new_instructions = f"{cleaned_instructions}"
+        await self.update_instructions(new_instructions)
+
 
 class KaiSession(AgentSession):
     def __init__(self, ctx: agents.JobContext):
@@ -156,10 +173,6 @@ class KaiSession(AgentSession):
         if self.participant is None:
             return
 
-        # await self.generate_reply(
-        #     instructions=f"Student name is {self.participant.name}, their CEFR level is {self.participant.cefr_level}, their native language is {self.participant.native_language}"
-        # )
-
     async def _analyze_messages(self, messages: RequestAnalyseVoiceCall):
         if self.participant is None:
             return
@@ -203,7 +216,7 @@ class KaiSession(AgentSession):
 
     async def on_participant_connected(self):
         await self.load_participant()
-        self.update_agent(Kai(instructions=await self.get_prompt()))
+        await self.current_agent.update_instructions(await self.get_prompt())
 
 
 class TesterSession(KaiSession):
@@ -258,6 +271,20 @@ async def entrypoint(ctx: agents.JobContext):
     def on_participant_connected(event: Any):
         asyncio.create_task(kai_session.on_participant_connected())
 
+    @ctx.room.local_participant.register_rpc_method("set_voice_speed")
+    async def adjust_speed_rpc(data: RpcInvocationData) -> str:
+        speed = json.loads(data.payload).get("preset")
+        normalized = (speed or "").strip().lower()
+        if normalized not in {"slow", "normal"}:
+            return "Invalid speed. Use 'slow' or 'normal'."
+
+        if normalized == "slow":
+            await kai_session.current_agent.adjust_speed(speed=speed)
+            kai_session.llm.update_options(speed=0.7)
+        else:
+            await kai_session.current_agent.adjust_speed(speed=speed)
+            kai_session.llm.update_options(speed=1)
+
     # avatar = simli.AvatarSession(
     #     simli_config=simli.SimliConfig(
     #         api_key=settings.simli_api_key,
@@ -267,6 +294,7 @@ async def entrypoint(ctx: agents.JobContext):
     # await avatar.start(kai_session, room=ctx.room)
 
     await kai_session.load_participant()
+    await kai_session.generate_reply(instructions="start")
 
 
 if __name__ == "__main__":
