@@ -78,7 +78,10 @@ class BeyondPresenceAvatarProvider(AvatarProvider):
         try:
             from livekit.plugins import bey
             
-            avatar_id = self.config.bey_avatar_id or "b5bebaf9-ae80-4e43-b97f-4506136ed926"
+            avatar_id = self.config.bey_avatar_id
+            if not avatar_id:
+                logger.error("Beyond Presence avatar requires bey_avatar_id")
+                return None
             identity = self.config.avatar_participant_identity or "bey-avatar-agent"
             name = self.config.avatar_participant_name or "bey-avatar-agent"
             
