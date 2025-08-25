@@ -1,0 +1,39 @@
+{
+  "default_avatar": "beyond_presence",
+  "avatars": {
+    "beyond_presence": {
+      "provider": "bey",
+      "enabled": true,
+      "avatar_id": "b5bebaf9-ae80-4e43-b97f-4506136ed926",
+      "participant_identity": "kai_test",
+      "participant_name": "Kai Avatar"
+    },
+    "anam": {
+      "provider": "anam",
+      "enabled": false,
+      "avatar_id": "your_anam_avatar_id",
+      "name": "your_anam_avatar_name",
+      "participant_name": "Anam Avatar"
+    },
+    "bithuman": {
+      "provider": "bithuman",
+      "enabled": false,
+      "model_path": "./path/to/your/model.imx"
+    },
+    "hedra": {
+      "provider": "hedra",
+      "enabled": false,
+      "avatar_id": "your_hedra_avatar_id"
+    },
+    "simli": {
+      "provider": "simli",
+      "enabled": false,
+      "face_id": "your_simli_face_id"
+    },
+    "tavus": {
+      "provider": "tavus",
+      "enabled": false,
+      "avatar_id": "your_tavus_avatar_id"
+    }
+  }
+}

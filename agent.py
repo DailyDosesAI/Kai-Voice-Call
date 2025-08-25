@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 import os
 import re
 from enum import Enum
@@ -19,11 +20,17 @@ from livekit.rtc import RpcInvocationData
 from openai import AsyncOpenAI
 from openai.types.beta.realtime.session import TurnDetection
 from pydantic import BaseModel, Field
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from models.language_level import LanguageLevel
+from models.avatar import AvatarFactory, AvatarSession as AvatarSessionManager
+from models.avatar_config_loader import AvatarConfigLoader
 
 load_dotenv()
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 
 class PromptSettings(BaseModel):
@@ -60,8 +67,7 @@ class KaiSettings(BaseSettings):
     prompt: PromptSettings = Field(
         default_factory=lambda: PromptSettings.load_from_file(os.getenv("PROMPTS_FILE", "prompts.json")))
 
-    class Config:
-        env_file = ".env"
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 
 settings = KaiSettings()
@@ -285,14 +291,25 @@ async def entrypoint(ctx: agents.JobContext):
             await kai_session.current_agent.adjust_speed(speed=speed)
             kai_session.llm.update_options(speed=1)
 
-    # avatar = simli.AvatarSession(
-    #     simli_config=simli.SimliConfig(
-    #         api_key=settings.simli_api_key,
-    #         face_id=settings.simli_face_id,
-    #     ),
-    # )
-    # await avatar.start(kai_session, room=ctx.room)
-
+    # Create and start avatar using the configuration loader
+    avatar_loader = AvatarConfigLoader()
+    avatar_config = avatar_loader.get_avatar_config()
+    
+    if avatar_config:
+        avatar_session = AvatarSessionManager(avatar_config)
+        
+        # Start avatar with error handling - won't crash the session if avatar fails
+        try:
+            await avatar_session.start(kai_session, room=ctx.room)
+            if avatar_session.is_active:
+                logger.info(f"Avatar {avatar_config.provider.value} started successfully")
+            else:
+                logger.warning(f"Avatar {avatar_config.provider.value} failed to start, continuing without avatar")
+        except Exception as e:
+            logger.error(f"Avatar error: {e}, continuing without avatar")
+    else:
+        logger.warning("No avatar configuration found, continuing without avatar")
+    
     await kai_session.load_participant()
     await kai_session.generate_reply(instructions="start")
 
