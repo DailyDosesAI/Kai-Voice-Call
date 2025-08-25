@@ -20,7 +20,7 @@ from livekit.rtc import RpcInvocationData
 from openai import AsyncOpenAI
 from openai.types.beta.realtime.session import TurnDetection
 from pydantic import BaseModel, Field
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from models.language_level import LanguageLevel
 from models.avatar import AvatarFactory, AvatarSession as AvatarSessionManager
@@ -67,8 +67,7 @@ class KaiSettings(BaseSettings):
     prompt: PromptSettings = Field(
         default_factory=lambda: PromptSettings.load_from_file(os.getenv("PROMPTS_FILE", "prompts.json")))
 
-    class Config:
-        env_file = ".env"
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 
 settings = KaiSettings()
