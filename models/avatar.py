@@ -134,7 +134,7 @@ class AnamAvatarProvider(AvatarProvider):
             return anam.AvatarSession(
                 persona_config=anam.PersonaConfig(
                     name=name,
-                    avatarId=avatar_id
+                    avatar_id=avatar_id
                 ),
                 avatar_participant_name=self.config.avatar_participant_name or "anam-avatar-agent"
             )
