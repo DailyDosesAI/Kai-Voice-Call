@@ -64,8 +64,6 @@ class KaiSettings(BaseSettings):
     simli_api_key: str
     simli_face_id: str
 
-    bey_api_key: str
-
     prompt: PromptSettings = Field(
         default_factory=lambda: PromptSettings.load_from_file(os.getenv("PROMPTS_FILE", "prompts.json")))
 
