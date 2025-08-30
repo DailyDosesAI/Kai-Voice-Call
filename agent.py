@@ -317,6 +317,8 @@ async def entrypoint(ctx: agents.JobContext):
             await kai_session.current_agent.adjust_speed(speed=speed)
             kai_session.llm.update_options(speed=1)
 
+        return "Speed has been adjusted."
+
     # avatar = simli.AvatarSession(
     #     simli_config=simli.SimliConfig(
     #         api_key=settings.simli_api_key,
