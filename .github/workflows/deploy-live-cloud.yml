@@ -20,5 +20,5 @@ jobs:
           sshpass -p "$SSH_PASSWORD" ssh -o StrictHostKeyChecking=no root@${{ secrets.VPS_HOST }} << 'EOF'
             cd /root/Rewatch/Kai-Voice-Call/
             git pull origin main
-            lk agent deploy
+            lk agent deploy --secrets-file .env
           EOF

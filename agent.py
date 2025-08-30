@@ -24,6 +24,8 @@ from avatar.avatar import AvatarSession as AvatarSessionManager
 from avatar.avatar_config_loader import AvatarConfigLoader
 from models.language_level import LanguageLevel
 
+load_dotenv()
+
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -59,6 +61,8 @@ class KaiSettings(BaseSettings):
 
     simli_api_key: str
     simli_face_id: str
+    
+    bey_api_key: str
 
     class Config:
         env_file = ".env"
@@ -83,7 +87,6 @@ class LazyProxy:
 
 def _build_settings() -> KaiSettings:
     # Load environment variables lazily on first access
-    load_dotenv()
     return KaiSettings()
 
 
