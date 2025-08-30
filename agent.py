@@ -9,21 +9,17 @@ from typing import Optional
 
 import httpx
 from dotenv import load_dotenv
-from langfuse import Langfuse
 from livekit import agents
 from livekit.agents import Agent
 from livekit.agents import AgentSession, RoomInputOptions
 from livekit.agents import ConversationItemAddedEvent
 from livekit.plugins import noise_cancellation, openai
 from livekit.rtc import RpcInvocationData
-from openai import AsyncOpenAI
 from openai.types.beta.realtime.session import TurnDetection
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 from pydantic_settings import BaseSettings
 
 from models.language_level import LanguageLevel
-
-load_dotenv()
 
 
 class PromptSettings(BaseModel):
@@ -57,22 +53,55 @@ class KaiSettings(BaseSettings):
     simli_api_key: str
     simli_face_id: str
 
-    prompt: PromptSettings = Field(
-        default_factory=lambda: PromptSettings.load_from_file(os.getenv("PROMPTS_FILE", "prompts.json")))
-
     class Config:
         env_file = ".env"
 
 
-settings = KaiSettings()
+class LazyProxy:
+    def __init__(self, factory):
+        self._factory = factory
+        self._instance = None
 
-gpt = AsyncOpenAI(api_key=settings.openai_api_key)
+    def _get(self):
+        if self._instance is None:
+            self._instance = self._factory()
+        return self._instance
 
-langfuse = Langfuse(
-    public_key=settings.langfuse_public_key,
-    secret_key=settings.langfuse_secret_key,
-    host=settings.langfuse_host,
-)
+    def __getattr__(self, name):
+        return getattr(self._get(), name)
+
+    def __call__(self, *args, **kwargs):
+        return self._get()(*args, **kwargs)
+
+
+def _build_settings() -> KaiSettings:
+    # Load environment variables lazily on first access
+    load_dotenv()
+    return KaiSettings()
+
+
+def _build_gpt():
+    from openai import AsyncOpenAI
+    return AsyncOpenAI(api_key=settings.openai_api_key)
+
+
+def _build_langfuse():
+    from langfuse import Langfuse
+    return Langfuse(
+        public_key=settings.langfuse_public_key,
+        secret_key=settings.langfuse_secret_key,
+        host=settings.langfuse_host,
+    )
+
+
+def _build_prompts() -> PromptSettings:
+    return PromptSettings.load_from_file(os.getenv("PROMPTS_FILE", "prompts.json"))
+
+
+settings = LazyProxy(_build_settings)
+gpt = LazyProxy(_build_gpt)
+langfuse = LazyProxy(_build_langfuse)
+prompts = LazyProxy(_build_prompts)
 
 
 class KaiSessionMetadata(BaseModel):
@@ -145,8 +174,11 @@ class KaiSession(AgentSession):
         if not self.participant:
             raise ValueError("Student is not set")
 
-        voice_call_prompt_id = settings.prompt.voice_call_prompt_a if self.participant.cefr_level in [LanguageLevel.A1,
-                                                                                                      LanguageLevel.A2] else settings.prompt.voice_call_prompt_b_and_c
+        voice_call_prompt_id = (
+            prompts.voice_call_prompt_a
+            if self.participant.cefr_level in [LanguageLevel.A1, LanguageLevel.A2]
+            else prompts.voice_call_prompt_b_and_c
+        )
         voice_call_prompt = langfuse.get_prompt(voice_call_prompt_id)
 
         return voice_call_prompt.compile(

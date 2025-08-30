@@ -1,6 +1,6 @@
 # This is an example Dockerfile that builds a minimal container for running LK Agents
 # syntax=docker/dockerfile:1
-ARG PYTHON_VERSION=3.11.6
+ARG PYTHON_VERSION=3.13.3
 FROM python:${PYTHON_VERSION}-slim
 
 # Keeps Python from buffering stdout and stderr to avoid situations where

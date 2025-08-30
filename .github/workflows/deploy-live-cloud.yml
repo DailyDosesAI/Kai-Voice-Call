@@ -1,0 +1,24 @@
+name: Deploy to Livekit Cloud - Main
+
+on:
+  push:
+    branches:
+      - main # Trigger on push to the stage branch
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Install sshpass
+        run: sudo apt-get update && sudo apt-get install -y sshpass
+
+      - name: SSH into VPS and deploy
+        env:
+          SSH_PASSWORD: ${{ secrets.VPS_PASSWORD }}
+        run: |
+          sshpass -p "$SSH_PASSWORD" ssh -o StrictHostKeyChecking=no root@${{ secrets.VPS_HOST }} << 'EOF'
+            cd /root/Rewatch/Kai-Voice-Call/
+            git pull origin main
+            lk agent deploy
+          EOF
