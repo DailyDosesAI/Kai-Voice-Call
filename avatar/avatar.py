@@ -11,7 +11,6 @@ from enum import Enum
 from pydantic import BaseModel
 
 from livekit.agents import AgentSession
-from livekit import agents
 
 logger = logging.getLogger(__name__)
 

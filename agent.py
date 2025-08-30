@@ -20,8 +20,8 @@ from openai.types.beta.realtime.session import TurnDetection
 from pydantic import BaseModel
 from pydantic_settings import BaseSettings
 
-from models.avatar import AvatarSession as AvatarSessionManager
-from models.avatar_config_loader import AvatarConfigLoader
+from avatar.avatar import AvatarSession as AvatarSessionManager
+from avatar.avatar_config_loader import AvatarConfigLoader
 from models.language_level import LanguageLevel
 
 # Configure logging
