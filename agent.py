@@ -23,8 +23,8 @@ from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from models.language_level import LanguageLevel
-from models.avatar import AvatarFactory, AvatarSession as AvatarSessionManager
-from models.avatar_config_loader import AvatarConfigLoader
+from avatar.avatar import AvatarSession as AvatarSessionManager
+from avatar.avatar_config_loader import AvatarConfigLoader
 
 load_dotenv()
 

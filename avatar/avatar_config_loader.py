@@ -7,7 +7,7 @@ import logging
 from pathlib import Path
 from typing import Dict, Any, Optional
 
-from .avatar import AvatarConfig, AvatarProviderType, AvatarFactory
+from avatar.avatar import AvatarConfig, AvatarFactory
 
 logger = logging.getLogger(__name__)
 
