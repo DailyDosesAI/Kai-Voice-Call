@@ -10,23 +10,19 @@ from typing import Optional
 
 import httpx
 from dotenv import load_dotenv
-from langfuse import Langfuse
 from livekit import agents
 from livekit.agents import Agent
 from livekit.agents import AgentSession, RoomInputOptions
 from livekit.agents import ConversationItemAddedEvent
 from livekit.plugins import noise_cancellation, openai
 from livekit.rtc import RpcInvocationData
-from openai import AsyncOpenAI
 from openai.types.beta.realtime.session import TurnDetection
-from pydantic import BaseModel, Field
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import BaseModel
+from pydantic_settings import BaseSettings
 
-from models.language_level import LanguageLevel
-from models.avatar import AvatarFactory, AvatarSession as AvatarSessionManager
+from models.avatar import AvatarSession as AvatarSessionManager
 from models.avatar_config_loader import AvatarConfigLoader
-
-load_dotenv()
+from models.language_level import LanguageLevel
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -64,21 +60,55 @@ class KaiSettings(BaseSettings):
     simli_api_key: str
     simli_face_id: str
 
-    prompt: PromptSettings = Field(
-        default_factory=lambda: PromptSettings.load_from_file(os.getenv("PROMPTS_FILE", "prompts.json")))
-
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    class Config:
+        env_file = ".env"
 
 
-settings = KaiSettings()
+class LazyProxy:
+    def __init__(self, factory):
+        self._factory = factory
+        self._instance = None
 
-gpt = AsyncOpenAI(api_key=settings.openai_api_key)
+    def _get(self):
+        if self._instance is None:
+            self._instance = self._factory()
+        return self._instance
 
-langfuse = Langfuse(
-    public_key=settings.langfuse_public_key,
-    secret_key=settings.langfuse_secret_key,
-    host=settings.langfuse_host,
-)
+    def __getattr__(self, name):
+        return getattr(self._get(), name)
+
+    def __call__(self, *args, **kwargs):
+        return self._get()(*args, **kwargs)
+
+
+def _build_settings() -> KaiSettings:
+    # Load environment variables lazily on first access
+    load_dotenv()
+    return KaiSettings()
+
+
+def _build_gpt():
+    from openai import AsyncOpenAI
+    return AsyncOpenAI(api_key=settings.openai_api_key)
+
+
+def _build_langfuse():
+    from langfuse import Langfuse
+    return Langfuse(
+        public_key=settings.langfuse_public_key,
+        secret_key=settings.langfuse_secret_key,
+        host=settings.langfuse_host,
+    )
+
+
+def _build_prompts() -> PromptSettings:
+    return PromptSettings.load_from_file(os.getenv("PROMPTS_FILE", "prompts.json"))
+
+
+settings = LazyProxy(_build_settings)
+gpt = LazyProxy(_build_gpt)
+langfuse = LazyProxy(_build_langfuse)
+prompts = LazyProxy(_build_prompts)
 
 
 class KaiSessionMetadata(BaseModel):
@@ -151,8 +181,11 @@ class KaiSession(AgentSession):
         if not self.participant:
             raise ValueError("Student is not set")
 
-        voice_call_prompt_id = settings.prompt.voice_call_prompt_a if self.participant.cefr_level in [LanguageLevel.A1,
-                                                                                                      LanguageLevel.A2] else settings.prompt.voice_call_prompt_b_and_c
+        voice_call_prompt_id = (
+            prompts.voice_call_prompt_a
+            if self.participant.cefr_level in [LanguageLevel.A1, LanguageLevel.A2]
+            else prompts.voice_call_prompt_b_and_c
+        )
         voice_call_prompt = langfuse.get_prompt(voice_call_prompt_id)
 
         return voice_call_prompt.compile(
@@ -291,13 +324,15 @@ async def entrypoint(ctx: agents.JobContext):
             await kai_session.current_agent.adjust_speed(speed=speed)
             kai_session.llm.update_options(speed=1)
 
+        return "Speed has been adjusted."
+
     # Create and start avatar using the configuration loader
     avatar_loader = AvatarConfigLoader()
     avatar_config = avatar_loader.get_avatar_config()
-    
+
     if avatar_config:
         avatar_session = AvatarSessionManager(avatar_config)
-        
+
         # Start avatar with error handling - won't crash the session if avatar fails
         try:
             await avatar_session.start(kai_session, room=ctx.room)
@@ -309,7 +344,7 @@ async def entrypoint(ctx: agents.JobContext):
             logger.error(f"Avatar error: {e}, continuing without avatar")
     else:
         logger.warning("No avatar configuration found, continuing without avatar")
-    
+
     await kai_session.load_participant()
     await kai_session.generate_reply(instructions="start")
 
