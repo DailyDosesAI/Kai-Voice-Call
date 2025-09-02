@@ -61,7 +61,7 @@ class KaiSettings(BaseSettings):
 
     simli_api_key: str
     simli_face_id: str
-    
+
     bey_api_key: str
 
     class Config:
@@ -87,7 +87,10 @@ class LazyProxy:
 
 def _build_settings() -> KaiSettings:
     # Load environment variables lazily on first access
-    return KaiSettings()
+    _settings = KaiSettings()
+    if _settings.livekit_url.startswith("https"):
+        _settings.livekit_url = _settings.livekit_url.replace("https", "wss")
+    return _settings
 
 
 def _build_gpt():
@@ -228,8 +231,7 @@ class KaiSession(AgentSession):
                 )
                 response.raise_for_status()
             except Exception as e:
-                print(f"while analyzing conversation got {e}")
-                # TODO: catch properly and log properly
+                logger.warning(f"while analyzing conversation got {e}")
 
     async def on_conversation_item_added(self, event: ConversationItemAddedEvent):
         asyncio.create_task(self.load_participant())
@@ -293,6 +295,24 @@ class TesterSession(KaiSession):
 async def entrypoint(ctx: agents.JobContext):
     kai_session = KaiSession(ctx)
 
+    avatar_loader = AvatarConfigLoader()
+    avatar_config = avatar_loader.get_avatar_config()
+
+    if avatar_config:
+        avatar_session = AvatarSessionManager(avatar_config)
+
+        # Start avatar with error handling - won't crash the session if avatar fails
+        try:
+            await avatar_session.start(kai_session, livekit_url=settings.livekit_url, room=ctx.room)
+            if avatar_session.is_active:
+                logger.info(f"Avatar {avatar_config.provider.value} started successfully")
+            else:
+                logger.warning(f"Avatar {avatar_config.provider.value} failed to start, continuing without avatar")
+        except Exception as e:
+            logger.error(f"Avatar error: {e}, continuing without avatar")
+    else:
+        logger.warning("No avatar configuration found, continuing without avatar")
+
     await kai_session.start(
         room=ctx.room,
         agent=Kai(),
@@ -328,25 +348,6 @@ async def entrypoint(ctx: agents.JobContext):
             kai_session.llm.update_options(speed=1)
 
         return "Speed has been adjusted."
-
-    # Create and start avatar using the configuration loader
-    avatar_loader = AvatarConfigLoader()
-    avatar_config = avatar_loader.get_avatar_config()
-
-    if avatar_config:
-        avatar_session = AvatarSessionManager(avatar_config)
-
-        # Start avatar with error handling - won't crash the session if avatar fails
-        try:
-            await avatar_session.start(kai_session, room=ctx.room)
-            if avatar_session.is_active:
-                logger.info(f"Avatar {avatar_config.provider.value} started successfully")
-            else:
-                logger.warning(f"Avatar {avatar_config.provider.value} failed to start, continuing without avatar")
-        except Exception as e:
-            logger.error(f"Avatar error: {e}, continuing without avatar")
-    else:
-        logger.warning("No avatar configuration found, continuing without avatar")
 
     await kai_session.load_participant()
     await kai_session.generate_reply(instructions="start")
